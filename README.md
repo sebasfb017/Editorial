@@ -1,52 +1,124 @@
 # Seguimiento editorial · Centro de control
 
-Panel para llevar el control de los libros del archivo **Seguimiento Proyectos.xlsx**: se carga el Excel, se edita aquí mismo, se registra el seguimiento y se vuelve a descargar en el mismo formato.
+Aplicación web para la gestión integral de publicaciones editoriales: controla libros, revistas, cartillas y memorias desde su evaluación hasta su publicación, sincroniza información con archivos Excel, centraliza la base de datos en un servidor local para trabajo en red, gestiona el Comité Editorial y permite administrar pares evaluadores con envío directo de correos electrónicos.
 
-## Cómo ejecutarlo
+---
+
+## 1. Tecnologías principales
+
+- **Frontend:** React 19 + TypeScript + Vite 8.
+- **Manejo de Excel:** `xlsx` (SheetJS) para lectura, combinación, exportación y generación de plantilla `.xlsx`.
+- **Backend / API local:** Servidor HTTP en Node.js (`tsx server/index.ts`) con persistencia en JSON (`data/centro-editorial.json`) y envío de correos mediante `nodemailer`.
+- **Estilos:** CSS puro con variables (`src/styles.css`), sin frameworks externos.
+
+---
+
+## 2. Requisitos e instalación
+
+1. Tener instalado **Node.js** (versión 20 o superior).
+2. Clonar el repositorio e instalar dependencias:
 
 ```bash
+git clone https://github.com/sebasfb017/Editorial.git
+cd Editorial
 npm install
-npm run dev      # abre http://localhost:5173
-npm run build    # versión final en /dist (se puede publicar en cualquier hosting estático)
 ```
 
-## Cómo están organizadas las hojas
+---
 
-Cada hoja del Excel es una pestaña del menú lateral:
+## 3. Cómo ejecutar el proyecto en desarrollo
 
-| Hoja del Excel | Pestaña |
-| --- | --- |
-| Proyectos 2026-2 | Proyectos 2026-2 (registro maestro) |
-| Proceso de Libros | Proceso de libros |
-| Libros que salen en 2026 | Salen en 2026 |
-| Libros aprobados pendientes 2027 | Pendientes 2027+ |
+El proyecto consta de **dos procesos** que trabajan juntos (el frontend en Vite y el backend de API/correos):
 
-Un mismo libro aparece en varias hojas del Excel (p. ej. *Los Ingresos Públicos* está en las cuatro). Al importar, los títulos repetidos se **unen en una sola ficha**, así un cambio se refleja en todas las pestañas y no hay que actualizar el mismo dato cuatro veces. En la ficha se puede marcar en qué hojas aparece cada libro.
+1. **Terminal 1 — Iniciar el servidor centralizado (API y correos):**
+   ```bash
+   npm run server
+   ```
+   Escucha en `http://127.0.0.1:48211` y guarda automáticamente los datos en `data/centro-editorial.json`.
 
-Además hay dos vistas propias del centro de control:
+2. **Terminal 2 — Iniciar la interfaz web (Vite):**
+   ```bash
+   npm run dev
+   ```
+   Abre en el puerto **`48210`** (`http://localhost:48210/` y también expuesto en la IP de red local gracias a `host: true` en `vite.config.ts`).  
+   Todas las peticiones a `/api/*` desde Vite se redirigen automáticamente al servidor `127.0.0.1:48211` mediante el proxy configurado en `vite.config.ts`.
 
-- **Resumen**: cifras generales, en qué fase está cada libro, alertas, calendario de publicación por año, inversión por CDP.
-- **Bitácora**: historial de notas, cambios de fase y actualizaciones desde Excel.
+3. **Compilar para producción (verificación de TypeScript + bundle):**
+   ```bash
+   npm run build
+   ```
 
-## Funciones
+---
 
-- Cargar Excel (botón o arrastrando el archivo a la ventana). Si ya hay datos, se puede **combinar** (conserva notas, responsables y fechas) o **reemplazar**.
-- Edición directa en la tabla (doble clic en una celda) o en la ficha completa (clic en el título).
-- Fase editorial normalizada (sin información → evaluación → cotización → aprobado → estilo → diagramación → revisión del autor → impresión → listo), inferida automáticamente del texto del Excel y editable.
-- Responsable, próxima acción y fecha compromiso por libro; las vencidas aparecen en *Requiere atención*.
-- Agregar y eliminar libros (con opción de deshacer, también Ctrl+Z).
-- Descargar Excel con las 4 hojas en el formato original + columnas de gestión + hoja *Bitácora*. Ese archivo se puede volver a cargar sin perder información.
+## 4. Estructura del proyecto (mapa de archivos)
 
-Los datos se guardan automáticamente en el navegador de este equipo (localStorage). Para compartir o respaldar, usa **Descargar Excel**.
-
-## Estructura
-
+```text
+├── server/
+│   └── index.ts                 # Servidor HTTP Node: API (/api/estado, /api/correo/*) y envío SMTP con Nodemailer
+├── data/                        # (Ignorado en Git) Base de datos JSON local: centro-editorial.json
+├── public/                      # Archivos estáticos opcionales
+├── scripts/
+│   └── probar-importacion.ts    # Script de prueba para lectura y exportación de Excel
+├── src/
+│   ├── App.tsx                  # Componente raíz: navegación entre vistas, ficha lateral, modales y atajos (Esc, Ctrl+Z)
+│   ├── main.tsx                 # Punto de entrada React
+│   ├── types.ts                 # Tipos TypeScript (Libro, ParEvaluador, ComiteEditorial, PlantillaCorreo, etc.)
+│   ├── store.ts                 # Estado global (useReducer), sincronización con /api/estado, respaldo localStorage y deshacer
+│   ├── fases.ts                 # Catálogo de las 10 fases editoriales e inferencia automática desde texto libre
+│   ├── correo.ts                # Renderizado de plantillas de correo con variables dinámicas
+│   ├── utils.ts                 # Utilidades: formato COP, fechas, normalización y comparación de títulos (mismoTitulo)
+│   ├── styles.css               # Hoja de estilos completa (paleta morado y rosa claro, diseño responsive)
+│   ├── excel/
+│   │   ├── importar.ts          # Lectura de Excel, unión de títulos repetidos entre hojas, clasificación y combinación
+│   │   └── exportar.ts          # Exportación a Excel (.xlsx) y generador de la plantilla oficial descargable
+│   └── components/
+│       ├── Sidebar.tsx          # Menú lateral, contadores por hoja, botones de Excel e indicador Servidor/Local
+│       ├── Resumen.tsx          # Dashboard principal: filtros, tarjetas KPI interactivas, fases, alertas, CDP y Comité Editorial
+│       ├── Hoja.tsx             # Vista de tabla editable en línea para cada hoja del Excel
+│       ├── Ficha.tsx            # Panel lateral completo de cada publicación (fases, campos, pares evaluadores y bitácora)
+│       ├── NuevaPublicacion.tsx # Modal para crear publicaciones eligiendo Arbitrada / No arbitrada y todos sus campos
+│       ├── Pares.tsx            # Módulo de Pares Evaluadores, bocetos de correo y configuración de cuenta SMTP
+│       ├── Bitacora.tsx         # Historial cronológico global de notas y cambios
+│       ├── Importar.tsx         # Modal de carga de Excel (Combinar / Reemplazar) y descarga de plantilla oficial
+│       ├── Toast.tsx            # Notificaciones flotantes con botón de Deshacer
+│       └── ui.tsx               # Componentes base compartidos (FaseTag, IsbnCell, Icono SVG)
+├── vite.config.ts               # Configuración de Vite (puerto 48210 y proxy /api -> 48211)
+└── package.json                 # Dependencias y scripts
 ```
-src/
-  excel/importar.ts   lectura del Excel, unión de títulos, interpretación de años/fechas
-  excel/exportar.ts   generación del Excel con las mismas hojas
-  fases.ts            fases editoriales y reglas para inferirlas
-  store.ts            estado, guardado automático, deshacer, registro de cambios
-  components/         Resumen, Hoja (tabla editable), Ficha, Bitácora, Importar
-scripts/probar-importacion.ts   prueba de lectura + ida y vuelta del Excel
-```
+
+---
+
+## 5. Funcionalidades principales
+
+### A. Agrupación editorial y filtro por año
+- Cada publicación pertenece a una única agrupación:
+  - **Publicaciones arbitradas:** `Libro` o `Revista`.
+  - **Publicaciones no arbitradas:** `Cartilla` o `Memoria`.
+- En **Resumen** (`src/components/Resumen.tsx`) se puede filtrar todo el tablero por agrupación y por **Año en trabajo** (detectado de los años digitales, físicos o fechas de salida).
+
+### B. Tablero principal interactivo (`Resumen.tsx`)
+- **Tarjetas superiores interactivas:** al hacer clic en cualquiera de los 5 indicadores (*Títulos en el registro maestro*, *Inversión comprometida*, *En producción editorial*, *Con ISBN asignado*, *Salen en 2026*), se despliega un panel con el desglose y acceso directo a los libros o a la hoja correspondiente.
+- **Dónde está cada libro:** recorrido por las 10 fases editoriales (`Sin información` → `En evaluación` → `En cotización` → `Cotización aprobada` → `Corrección de estilo` → `Diagramación` → `Revisión del autor` → `Impresión / ISBN` → `Listo / publicado` / `Detenido`).
+- **Requiere atención:** alertas automáticas por fechas vencidas, salidas próximas, falta de ISBN o costos pendientes.
+- **Comité editorial:** agenda de próxima sesión, gestión de participantes, lista conectada de publicaciones en evaluación/aprobación con botones rápidos (**Aprobar** / **Detener**) y botón **Copiar orden del día**.
+
+### C. Hojas tipo Excel y Ficha lateral (`Hoja.tsx`, `Ficha.tsx`, `NuevaPublicacion.tsx`)
+- Un mismo título puede aparecer en varias hojas del Excel (`Proyectos 2026-2`, `Proceso de Libros`, `Libros que salen en 2026`, `Aprobados pendientes 2027`); el sistema los **unifica en una sola ficha** para evitar ediciones duplicadas.
+- Permite edición directa haciendo doble clic en la tabla o abriendo la ficha lateral completa.
+- Incluye campos de gestión y seguimiento: *Líder de proyecto*, *Concepto de pares evaluadores*, *Requerimiento*, *CDP*, *ISBN*, *Valor*, *Responsable*, *Próxima acción* y *Fecha compromiso*.
+
+### D. Importación, exportación y plantilla Excel (`importar.ts`, `exportar.ts`)
+- Desde **Cargar Excel** se puede descargar la **Plantilla oficial (.xlsx)** con los encabezados esperados y una hoja de instrucciones.
+- Al subir un `.xlsx`, omite automáticamente filas de totales (`TOTAL...`), infiere fases desde textos libres, respeta la agrupación asignada y permite **Combinar** (conservando notas y gestiones previas) o **Reemplazar**.
+
+### E. Módulo de Pares Evaluadores y envío de correos (`Pares.tsx`, `correo.ts`, `server/index.ts`)
+- **Seguimiento de pares:** desde la ficha de cada libro o desde la pestaña **Pares y correos**, se asignan docentes pares con su correo, estado (*Por invitar*, *Invitado*, *Aceptado*, *Evaluado*, *Vencido*) y fecha límite.
+- **Boceto de correo y reglas:** permite personalizar el asunto y cuerpo de *Invitación* y *Recordatorio* usando variables (`{nombrePar}`, `{titulo}`, `{autores}`, `{proyecto}`, `{liderProyecto}`, `{fechaLimite}`, `{requerimiento}`), definir copia `CC`, plazo en días y días de aviso previo.
+- **Cuenta SMTP:** configuración de servidor SMTP, puerto, usuario y contraseña de aplicación (o variables de entorno `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_NAME`) con botón para probar la conexión antes de enviar.
+
+---
+
+## 6. Seguridad y datos en Git
+
+- Las carpetas `node_modules/`, `dist/`, `data/` y archivos `.env*` están excluidos en `.gitignore`.
+- **Nunca subas `data/centro-editorial.json` ni archivos `.env` al repositorio**, ya que contienen la base de datos local y las credenciales SMTP configuradas.
