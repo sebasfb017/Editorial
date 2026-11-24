@@ -1,3 +1,9 @@
+/**
+ * Vista principal ("Estado del fondo editorial"):
+ * - Barra de agrupación (Todas / Arbitradas / No arbitradas) y selector de año en trabajo.
+ * - 5 tarjetas KPI superiores interactivas con panel de detalle desplegable.
+ * - Recorrido por fases, alertas, calendario de publicación, inversión por CDP y Comité Editorial.
+ */
 import { useMemo, useState, type FormEvent } from 'react';
 import type { ComiteEditorial, FaseId, Libro, TipoPublicacion, Vista } from '../types';
 import { FASES, FASE_MAP } from '../fases';

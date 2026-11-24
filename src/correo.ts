@@ -1,6 +1,11 @@
+/**
+ * Utilidades para rellenar las plantillas de correo de pares evaluadores
+ * reemplazando marcadores como {nombrePar}, {titulo}, {autores}, {fechaLimite}, etc.
+ */
 import type { Libro, ParEvaluador, PlantillaCorreo } from './types';
 import { fmtFechaCorta, tituloCorto } from './utils';
 
+/** Genera el asunto y cuerpo final de un correo de invitación o recordatorio. */
 export function renderPlantillaCorreo(
   plantilla: PlantillaCorreo,
   tipo: 'invitacion' | 'recordatorio',
@@ -28,6 +33,7 @@ export function renderPlantillaCorreo(
   return { asunto, cuerpo };
 }
 
+/** Devuelve una fecha ISO (yyyy-mm-dd) sumando N días a la fecha actual. */
 export function fechaMasDias(dias: number): string {
   const d = new Date();
   d.setDate(d.getDate() + dias);

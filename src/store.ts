@@ -1,3 +1,9 @@
+/**
+ * Hook y reducer principal de estado (`useLibros`).
+ * - Mantiene libros, comité editorial, configuración pública SMTP y plantillas de correo.
+ * - Al iniciar, se hidrata desde `/api/estado` (servidor) y usa `localStorage` como respaldo local.
+ * - Cada cambio se guarda automáticamente con un pequeño debounce (250 ms).
+ */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComiteEditorial, CorreoConfigPublica, FaseId, Libro, Nota, PlantillaCorreo, TipoNota } from './types';
 import { FASE_MAP } from './fases';

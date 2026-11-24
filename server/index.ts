@@ -1,3 +1,8 @@
+/**
+ * Servidor HTTP local del Centro Editorial (puerto 48211 por defecto).
+ * - Centraliza la base de datos en `data/centro-editorial.json` para que varios equipos en red compartan la información.
+ * - Expone rutas REST para estado (`/api/estado`) y envío/configuración de correos SMTP (`/api/correo/*`).
+ */
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -72,6 +77,7 @@ function leerDb(): DbEstado {
   }
 }
 
+/** Escritura atómica en disco (archivo temporal + rename) para evitar corrupción si se cierra de golpe. */
 function guardarDb(db: DbEstado) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = `${DB_FILE}.tmp`;
@@ -120,6 +126,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
   try {
+    // 1. Obtener estado completo (sin exponer la contraseña SMTP al navegador)
     if (req.method === 'GET' && url.pathname === '/api/estado') {
       const db = leerDb();
       return json(res, 200, {
@@ -132,6 +139,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // 2. Guardar cambios de libros, comité o archivo fuente
     if (req.method === 'PUT' && url.pathname === '/api/estado') {
       const body = JSON.parse(await leerBody(req)) as {
         libros?: Libro[];
@@ -147,6 +155,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, guardado: db.guardado });
     }
 
+    // 3. Guardar configuración SMTP y/o bocetos de correo
     if (req.method === 'PUT' && url.pathname === '/api/correo/config') {
       const body = JSON.parse(await leerBody(req)) as {
         correoConfig?: Partial<CorreoConfigInterna>;
@@ -172,6 +181,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // 4. Verificar conexión SMTP antes de enviar correos reales
     if (req.method === 'POST' && url.pathname === '/api/correo/probar') {
       const db = leerDb();
       const transporter = crearTransporter(db.correoConfig);
@@ -179,6 +189,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, mensaje: 'Conexión SMTP verificada correctamente.' });
     }
 
+    // 5. Enviar correo electrónico real a un par evaluador mediante Nodemailer
     if (req.method === 'POST' && url.pathname === '/api/correo/enviar') {
       const body = JSON.parse(await leerBody(req)) as {
         para: string;

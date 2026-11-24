@@ -1,3 +1,8 @@
+/**
+ * Definición central de tipos de datos del Centro Editorial.
+ */
+
+/** Fases del recorrido editorial de una publicación. */
 export type FaseId =
   | 'sin_info'
   | 'evaluacion'
@@ -22,9 +27,11 @@ export interface Nota {
 /** Hojas del libro de Excel original. Cada libro puede aparecer en varias. */
 export type HojaId = 'proyectos' | 'proceso' | 'salida' | 'pendientes';
 
+/** Agrupación principal: arbitradas (libros/revistas) vs. no arbitradas (cartillas/memorias). */
 export type TipoPublicacion = 'arbitrada' | 'no_arbitrada';
 export type SubtipoPublicacion = 'libro' | 'revista' | 'cartilla' | 'memoria';
 
+/** Participante registrado en el Comité Editorial. */
 export interface ParticipanteComite {
   id: string;
   nombre: string;
@@ -39,6 +46,7 @@ export interface ComiteEditorial {
   participantes: ParticipanteComite[];
 }
 
+/** Par evaluador asignado a una publicación y estado de su seguimiento por correo. */
 export type EstadoPar = 'pendiente' | 'invitado' | 'aceptado' | 'evaluado' | 'vencido';
 
 export interface ParEvaluador {

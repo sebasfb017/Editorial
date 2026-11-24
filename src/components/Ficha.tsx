@@ -1,3 +1,8 @@
+/**
+ * Panel lateral de detalle y edición de una publicación:
+ * - Selector visual de fase editorial, clasificación (Arbitrada / No arbitrada),
+ *   gestión de pares evaluadores con envío de correo, datos del proyecto, publicación y bitácora.
+ */
 import { useEffect, useRef, useState } from 'react';
 import type { EstadoPar, HojaId, Libro, ParEvaluador, PlantillaCorreo, SubtipoPublicacion, TipoPublicacion } from '../types';
 import { FASES } from '../fases';

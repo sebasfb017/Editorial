@@ -1,3 +1,8 @@
+/**
+ * Modal para registrar una nueva publicación desde cero.
+ * Permite elegir primero la agrupación (Arbitrada o No arbitrada), su categoría
+ * (Libro, Revista, Cartilla o Memoria) y completar los datos iniciales del proyecto.
+ */
 import { useState, type FormEvent } from 'react';
 import type { FaseId, HojaId, Libro, SubtipoPublicacion, TipoPublicacion } from '../types';
 import { FASES } from '../fases';

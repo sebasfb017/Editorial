@@ -1,3 +1,9 @@
+/**
+ * Vista de "Pares y correos" con tres pestañas:
+ * 1. Seguimiento de pares: listado global de docentes pares con envío de invitación/recordatorio.
+ * 2. Boceto de correo y condiciones: editor de plantillas con variables y vista previa en vivo.
+ * 3. Cuenta de correo (SMTP): configuración y prueba de conexión del remitente en el servidor.
+ */
 import { useMemo, useState, type FormEvent } from 'react';
 import type { CorreoConfigPublica, EstadoPar, Libro, ParEvaluador, PlantillaCorreo } from '../types';
 import { renderPlantillaCorreo } from '../correo';
