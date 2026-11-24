@@ -134,10 +134,11 @@ export function parsePlan(texto: string, anioBase: number) {
 
 function tipoHoja(nombre: string): HojaId | null {
   const n = normalizar(nombre);
-  if (n.includes('pendiente') || /202[7-9]|203\d/.test(n)) return 'pendientes';
+  if (n.includes('pendiente')) return 'pendientes';
   if (n.includes('salen') || n.includes('salida')) return 'salida';
   if (n.includes('proceso')) return 'proceso';
   if (n.includes('proyecto') || n.includes('arbitrad') || n.includes('cartilla') || n.includes('memoria') || n.includes('revista') || /202[4-6]/.test(n)) return 'proyectos';
+  if (/202[7-9]|203\d/.test(n)) return 'pendientes';
   return null;
 }
 
@@ -170,6 +171,10 @@ function inferirClasificacion(
 }
 
 const COLS: Record<string, string[]> = {
+  id: ['id publicacion'],
+  anioDigital: ['ano digital'],
+  anioFisico: ['ano fisico'],
+  fechaSalida: ['fecha salida'],
   no: ['no', 'n', 'numero', 'no.'],
   tipoPublicacion: ['agrupacion', 'tipo de publicacion', 'tipo publicacion', 'arbitrada'],
   subtipoPublicacion: ['categoria', 'subtipo', 'formato publicacion', 'tipo'],
@@ -227,6 +232,7 @@ export function leerExcel(buffer: ArrayBuffer): ResultadoLectura {
   const hojas: ResumenHoja[] = [];
   const advertencias: string[] = [];
 
+  // El ID exportado tiene prioridad. El título completo se usa como compatibilidad con archivos antiguos.
   const buscar = (titulo: string) => libros.find((l) => mismoTitulo(l.titulo, titulo));
 
   // Orden de lectura: maestro primero para que su título y datos tengan prioridad.
@@ -264,10 +270,12 @@ export function leerExcel(buffer: ArrayBuffer): ResultadoLectura {
       const titulo = txt(get(f, 'titulo'));
       if (!titulo || /^total\b/.test(normalizar(titulo))) continue; // filas de totales o vacías
       n++;
-      let l = buscar(titulo);
+      const id = txt(get(f, 'id'));
+      let l = (id ? libros.find((l) => l.id === id) : undefined) ?? buscar(titulo);
       const esNuevo = !l;
       if (!l) {
-        l = libroVacio({ titulo });
+        l = libroVacio({ titulo, tipoPublicacion: undefined, subtipoPublicacion: undefined });
+        if (id) l.id = id;
         libros.push(l);
       }
       l.hojas[tipo] = true;
@@ -294,10 +302,17 @@ export function leerExcel(buffer: ArrayBuffer): ResultadoLectura {
       setSiVacio('requerimiento', txt(get(f, 'requerimiento')));
       const anioCol = Number(get(f, 'anio'));
       if (isFinite(anioCol) && anioCol >= 2000 && anioCol <= 2100) {
-        if (!l.anioFisico) l.anioFisico = anioCol;
-        if (!l.anioDigital) l.anioDigital = anioCol;
+        if (col.anioFisico === undefined && !l.anioFisico) l.anioFisico = anioCol;
+        if (col.anioDigital === undefined && !l.anioDigital) l.anioDigital = anioCol;
       }
 
+      for (const campo of ['anioDigital', 'anioFisico'] as const) {
+        if (col[campo] !== undefined) {
+          const valor = Number(get(f, campo));
+          l[campo] = valor >= 2000 && valor <= 2100 ? valor : null;
+        }
+      }
+      setSiVacio('fechaSalida', txt(get(f, 'fechaSalida')).slice(0, 10));
       if (tipo === 'proyectos') {
         const no = Number(get(f, 'no'));
         l.no = isFinite(no) && no > 0 ? no : l.no;
@@ -331,8 +346,8 @@ export function leerExcel(buffer: ArrayBuffer): ResultadoLectura {
           if (tipo === 'salida') l.obsSalida = obs;
           else l.obsPendiente = obs;
           const p = parsePlan(obs, anioBase);
-          if (p.digital) l.anioDigital = p.digital;
-          if (p.fisico) l.anioFisico = p.fisico;
+          if (p.digital && col.anioDigital === undefined && !l.anioDigital) l.anioDigital = p.digital;
+          if (p.fisico && col.anioFisico === undefined && !l.anioFisico) l.anioFisico = p.fisico;
           if (p.fecha && !l.fechaSalida) l.fechaSalida = p.fecha;
         }
       }
@@ -343,6 +358,18 @@ export function leerExcel(buffer: ArrayBuffer): ResultadoLectura {
   for (const l of libros) {
     const tieneFaseExplicita = l.fase !== 'sin_info';
     if (!tieneFaseExplicita) l.fase = inferirFase(l.etapa, l.estado, l.observacion);
+  }
+  // Las columnas técnicas de Bitácora permiten reconstruir notas sin perder su fecha ni su ID.
+  const bitacora = wb.Sheets['Bitácora'];
+  if (bitacora) {
+    for (const fila of XLSX.utils.sheet_to_json<Record<string, unknown>>(bitacora)) {
+      const libro = libros.find((l) => l.id === txt(fila['ID publicación']));
+      const fecha = txt(fila['Fecha ISO']);
+      const tipo = txt(fila['Tipo ID']);
+      if (libro && fecha && !isNaN(Date.parse(fecha)) && ['nota', 'cambio', 'sistema'].includes(tipo)) {
+        libro.seguimiento.push({ id: txt(fila['ID nota']) || uid(), fecha, texto: txt(fila.Nota), tipo: tipo as 'nota' | 'cambio' | 'sistema' });
+      }
+    }
   }
   // Numerar títulos sin número consecutivo al final
   let max = Math.max(0, ...libros.map((l) => l.no ?? 0));
@@ -385,11 +412,11 @@ export function planificarCombinacion(actuales: Libro[], importados: Libro[]): P
   const ahora = new Date().toISOString();
 
   for (const imp of importados) {
-    const ex = actuales.find((a) => !usados.has(a.id) && mismoTitulo(a.titulo, imp.titulo));
+    const ex = actuales.find((a) => !usados.has(a.id) && (a.id === imp.id || mismoTitulo(a.titulo, imp.titulo)));
     if (!ex) {
       plan.nuevos.push({
         ...imp,
-        seguimiento: [{ id: uid(), fecha: ahora, tipo: 'sistema', texto: 'Registrado desde Excel.' }],
+        seguimiento: [...imp.seguimiento, { id: uid(), fecha: ahora, tipo: 'sistema', texto: 'Registrado desde Excel.' }],
       });
       continue;
     }
@@ -429,8 +456,13 @@ export function planificarCombinacion(actuales: Libro[], importados: Libro[]): P
 
 export function aplicarCombinacion(actuales: Libro[], plan: PlanImportacion): Libro[] {
   const map = new Map(plan.actualizados.map((u) => [u.antes.id, u.despues]));
-  let max = Math.max(0, ...actuales.map((l) => l.no ?? 0));
-  const nuevos = plan.nuevos.map((n) => (actuales.some((a) => a.no === n.no) ? { ...n, no: ++max } : n));
+  let max = Math.max(0, ...actuales.map((l) => l.no ?? 0), ...plan.nuevos.map((l) => l.no ?? 0));
+  const usados = new Set(actuales.map((l) => l.no));
+  const nuevos = plan.nuevos.map((n) => {
+    const no = n.no == null || usados.has(n.no) ? ++max : n.no;
+    usados.add(no);
+    return { ...n, no };
+  });
   return [...actuales.map((a) => map.get(a.id) ?? a), ...nuevos];
 }
 
@@ -438,6 +470,6 @@ export function prepararReemplazo(importados: Libro[]): Libro[] {
   const ahora = new Date().toISOString();
   return importados.map((l) => ({
     ...l,
-    seguimiento: [{ id: uid(), fecha: ahora, tipo: 'sistema' as const, texto: 'Registrado desde Excel.' }],
+    seguimiento: [...l.seguimiento, { id: uid(), fecha: ahora, tipo: 'sistema' as const, texto: 'Registrado desde Excel.' }],
   }));
 }

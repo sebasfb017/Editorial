@@ -44,6 +44,10 @@ export const fmtFechaCorta = (s: string) => {
 export function diasDesde(iso: string, hoy = new Date()): number {
   const d = parseFecha(iso);
   if (!d) return 0;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const dia = (v: Date) => Date.UTC(v.getFullYear(), v.getMonth(), v.getDate());
+    return Math.round((dia(hoy) - dia(d)) / 86_400_000);
+  }
   return Math.floor((hoy.getTime() - d.getTime()) / 86_400_000);
 }
 
@@ -73,33 +77,26 @@ export function normalizar(s: string): string {
     .trim();
 }
 
-const VACIAS = new Set(
-  'la las el los de del y e en a al para por con una un uno desde sus su que o u'.split(' '),
-);
-const tokens = (s: string) => normalizar(s).split(' ').filter((w) => w && !VACIAS.has(w));
-
-/** ¿Dos títulos se refieren al mismo libro? (tolera títulos abreviados, p. ej. "(TLC)") */
+/** Solo unir automáticamente títulos completos equivalentes. */
 export function mismoTitulo(a: string, b: string): boolean {
-  const na = normalizar(a);
-  const nb = normalizar(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const ta = tokens(a);
-  const tb = tokens(b);
-  let lcp = 0;
-  while (lcp < ta.length && lcp < tb.length && ta[lcp] === tb[lcp]) lcp++;
-  const min = Math.min(ta.length, tb.length);
-  return lcp >= 3 && lcp / min >= 0.75;
+  return Boolean(normalizar(a)) && normalizar(a) === normalizar(b);
 }
 
 export type EstadoISBN = 'asignado' | 'tramite' | 'ninguno';
 export function estadoISBN(isbn: string): EstadoISBN {
-  if (/97[89][-\s]?\d/.test(isbn)) return 'asignado';
+  if (listaISBN(isbn).length) return 'asignado';
   if (isbn.trim()) return 'tramite';
   return 'ninguno';
 }
 export function listaISBN(isbn: string): string[] {
-  return isbn.match(/9?7[89][-\d]{10,}/g) ?? [];
+  const candidatos = isbn.match(/\b(?:97[89](?:[- ]?\d){10}|\d(?:[- ]?\d){8}[- ]?[\dXx])\b/g) ?? [];
+  return candidatos.filter((valor) => {
+    const n = valor.replace(/[- ]/g, '').toUpperCase();
+    if (/^97[89]\d{10}$/.test(n)) {
+      return [...n].reduce((s, c, i) => s + Number(c) * (i % 2 ? 3 : 1), 0) % 10 === 0;
+    }
+    return /^\d{9}[\dX]$/.test(n) && [...n].reduce((s, c, i) => s + (c === 'X' ? 10 : Number(c)) * (10 - i), 0) % 11 === 0;
+  });
 }
 
 export function primerAutor(autores: string): string {

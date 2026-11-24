@@ -8,6 +8,7 @@ import type { FaseId, HojaId, Libro, SubtipoPublicacion, TipoPublicacion } from 
 import { FASES } from '../fases';
 import { HOJAS, libroVacio } from '../excel/importar';
 import { Icono } from './ui';
+import { uid } from '../utils';
 
 interface Props {
   siguienteNo: number;
@@ -79,7 +80,7 @@ export function NuevaPublicacion({ siguienteNo, hojaInicial = 'proyectos', anioI
       hojas,
       seguimiento: [
         {
-          id: 'n0',
+          id: uid(),
           fecha: new Date().toISOString(),
           tipo: 'sistema',
           texto: `Creado en ${labelTipo} (${labelSub})${anioNum ? ` · año ${anioNum}` : ''}.`,

@@ -4,8 +4,8 @@
  * - Gestiona los modales/paneles globales: Ficha lateral, Importar Excel y Nueva Publicación.
  * - Registra atajos de teclado globales (`Esc` para cerrar ficha, `Ctrl+Z` para deshacer) y arrastrar-y-soltar Excel.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FaseId, HojaId, Libro, Vista } from './types';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import type { FaseId, HojaId, Libro, TipoPublicacion, Vista } from './types';
 import { useLibros } from './store';
 import { Sidebar } from './components/Sidebar';
 import { Resumen } from './components/Resumen';
@@ -13,11 +13,12 @@ import { Hoja } from './components/Hoja';
 import { Ficha } from './components/Ficha';
 import { Bitacora } from './components/Bitacora';
 import { Pares } from './components/Pares';
-import { Importar } from './components/Importar';
 import { NuevaPublicacion } from './components/NuevaPublicacion';
 import { Toast, type ToastMsg } from './components/Toast';
-import { exportarExcel } from './excel/exportar';
 import { descargar, hoyISO } from './utils';
+
+// Excel pesa más que el resto de la interfaz. Se descarga solo al abrir el importador.
+const ImportadorDiferido = lazy(() => import('./components/Importar').then((mod) => ({ default: mod.Importar })));
 
 export default function App() {
   const store = useLibros();
@@ -27,6 +28,8 @@ export default function App() {
   const [importando, setImportando] = useState<File | null | 'abrir'>(null);
   const [creandoEn, setCreandoEn] = useState<HojaId | null>(null);
   const [filtroFase, setFiltroFase] = useState<FaseId | null>(null);
+  const [filtroGrupo, setFiltroGrupo] = useState<'todas' | TipoPublicacion>('todas');
+  const [filtroAnio, setFiltroAnio] = useState<number | 'todos'>('todos');
   const [toast, setToast] = useState<ToastMsg | null>(null);
 
   useEffect(() => localStorage.setItem('ce.vista', vista), [vista]);
@@ -43,9 +46,11 @@ export default function App() {
 
   const libroAbierto = useMemo(() => libros.find((l) => l.id === abierto) ?? null, [libros, abierto]);
 
-  const irA = useCallback((v: Vista, fase: FaseId | null = null) => {
+  const irA = useCallback((v: Vista, fase: FaseId | null = null, contexto?: { grupo?: 'todas' | TipoPublicacion; anio?: number | 'todos' }) => {
     setVista(v);
     setFiltroFase(fase);
+    if (contexto?.grupo) setFiltroGrupo(contexto.grupo);
+    if (contexto?.anio !== undefined) setFiltroAnio(contexto.anio);
   }, []);
 
   const nuevo = (hoja: HojaId) => setCreandoEn(hoja);
@@ -59,10 +64,16 @@ export default function App() {
     });
   };
 
-  const exportar = () => {
+  // Mantener Excel fuera del paquete inicial acelera la apertura del tablero.
+  const exportar = async () => {
     if (!libros.length) return;
-    descargar(exportarExcel(libros), `Seguimiento Proyectos ${hoyISO()}.xlsx`);
-    setToast({ texto: 'Excel generado con las 4 hojas y la bitácora.' });
+    try {
+      const { exportarExcel } = await import('./excel/exportar');
+      descargar(exportarExcel(libros), `Seguimiento Proyectos ${hoyISO()}.xlsx`);
+      setToast({ texto: 'Excel generado con las 4 hojas y la bitácora.' });
+    } catch {
+      setToast({ texto: 'No se pudo generar el archivo Excel.' });
+    }
   };
 
   // Atajos: Esc cierra la ficha
@@ -93,6 +104,8 @@ export default function App() {
     };
   }, []);
 
+  if (store.cargando) return <div className="vacio" role="status">Cargando el registro editorial…</div>;
+
   return (
     <div className="app">
       <Sidebar
@@ -106,6 +119,16 @@ export default function App() {
         onExportar={exportar}
       />
       <main className="main">
+        {(store.pendiente || store.errorGuardado) && (
+          <section className="panel" role="status">
+            <p>{store.errorGuardado || 'Guardando cambios en el servidor…'}</p>
+            <button className="btn btn-peq" onClick={store.reintentar}>Reintentar guardado</button>
+            <button className="btn btn-peq" onClick={() => descargar(new Blob([JSON.stringify({ libros, comite: store.comite, archivo: store.archivo }, null, 2)], { type: 'application/json' }), `Respaldo editorial ${hoyISO()}.json`)}>Descargar respaldo completo</button>
+            <button className="btn btn-peq" onClick={() => {
+              if (window.confirm('Se cargarán los datos del servidor y se reemplazarán los cambios de este navegador. Descarga primero tu respaldo si necesitas conservarlos. ¿Continuar?')) void store.cargarServidor();
+            }}>Cargar versión del servidor</button>
+          </section>
+        )}
         {vista === 'resumen' && (
           <Resumen
             libros={libros}
@@ -116,6 +139,8 @@ export default function App() {
             archivo={store.archivo}
             abrir={setAbierto}
             irA={irA}
+            grupoActivo={filtroGrupo}
+            anioActivo={filtroAnio}
             onImportar={() => setImportando('abrir')}
             onNueva={() => setCreandoEn('proyectos')}
             onToast={(texto) => setToast({ texto })}
@@ -127,6 +152,8 @@ export default function App() {
             hoja={vista}
             libros={libros}
             filtroFaseInicial={filtroFase}
+            filtroGrupoInicial={filtroGrupo}
+            filtroAnioInicial={filtroAnio}
             abrir={setAbierto}
             abiertoId={abierto}
             actualizar={store.actualizar}
@@ -167,8 +194,8 @@ export default function App() {
         />
       )}
 
-      {importando && (
-        <Importar
+      {importando && <Suspense fallback={<div className="modal-fondo"><div className="modal" role="status">Cargando el importador…</div></div>}>
+        <ImportadorDiferido
           archivoInicial={importando === 'abrir' ? null : importando}
           actuales={libros}
           cerrar={() => setImportando(null)}
@@ -178,7 +205,7 @@ export default function App() {
             setToast({ texto: resumen, accion: { etiqueta: 'Deshacer', fn: () => store.deshacer() } });
           }}
         />
-      )}
+      </Suspense>}
 
       {creandoEn && (
         <NuevaPublicacion

@@ -122,3 +122,26 @@ El proyecto consta de **dos procesos** que trabajan juntos (el frontend en Vite 
 
 - Las carpetas `node_modules/`, `dist/`, `data/` y archivos `.env*` están excluidos en `.gitignore`.
 - **Nunca subas `data/centro-editorial.json` ni archivos `.env` al repositorio**, ya que contienen la base de datos local y las credenciales SMTP configuradas.
+
+## 7. Guardado y recuperación
+
+## 8. Registro de cambios
+
+La primera tanda de mejoras incluye comentarios en los puntos donde se controla la revisión de guardado, la carga diferida de Excel, la conservación de filtros del tablero y la reconstrucción de la bitácora.
+
+- Control de conflictos entre equipos mediante una revisión del estado.
+- Respaldo `.bak` antes de cada escritura de la base.
+- Validación de ISBN y fechas de calendario.
+- Importación con identificadores estables, años separados y notas recuperables.
+- Pruebas ejecutables con `npm test`.
+- Carga diferida del importador y exportador de Excel.
+
+Después de actualizar esta versión, reinicia el proceso `npm run server` y recarga los navegadores conectados. Cada guardado comprueba la versión de la base para detectar cambios hechos desde otro equipo. Los clientes de versiones anteriores deben recargarse antes de guardar.
+
+Si aparece un conflicto, descarga el respaldo completo desde el aviso. El botón **Cargar versión del servidor** solicita confirmación y reemplaza los cambios de ese navegador. Puedes revisar el JSON descargado para recuperar los cambios que todavía necesites incorporar. Los errores de conexión conservan los cambios locales y permiten reintentar el guardado.
+
+Antes de cada escritura, el servidor conserva la versión previa en `data/centro-editorial.json.bak`. Para restaurarla, detén el servidor, conserva una copia del archivo actual, copia el respaldo sobre `data/centro-editorial.json` y vuelve a iniciar el servidor. Los respaldos de esta carpeta contienen también la configuración SMTP y deben permanecer fuera de Git.
+
+La exportación Excel incluye identificadores, años digital y físico separados, fecha de salida y datos para recuperar las notas de la bitácora. Conserva estas columnas al editar el archivo. Para un respaldo completo del servidor, conserva el JSON de `data`.
+
+Ejecuta `npm test` para comprobar las regresiones de importación, fechas, ISBN, concurrencia y respaldos. La prueba del servidor utiliza un directorio temporal y un puerto asignado automáticamente.

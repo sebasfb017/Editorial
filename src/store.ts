@@ -160,77 +160,113 @@ export function useLibros() {
   const [correoConfig, setCorreoConfig] = useState<CorreoConfigPublica>(CORREO_DEFECTO);
   const [plantillaCorreo, setPlantillaCorreo] = useState<PlantillaCorreo>(PLANTILLA_DEFECTO);
   const historial = useRef<Libro[][]>([]);
-  const primera = useRef(true);
+  const [cargando, setCargando] = useState(true);
+  const [errorGuardado, setErrorGuardado] = useState('');
+  const [pendiente, setPendiente] = useState(false);
+  const [intento, setIntento] = useState(0);
+  const revision = useRef<string | undefined>(undefined);
   const hidratando = useRef(false);
+  const conflicto = useRef(false);
+  const cola = useRef(Promise.resolve());
+  const secuencia = useRef(0);
 
-  // Al iniciar, sincronizar con la base centralizada del servidor
-  useEffect(() => {
-    let cancelado = false;
-    fetch('/api/estado')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('API no disponible'))))
-      .then((srv) => {
-        if (cancelado) return;
-        setServidorActivo(true);
-        if (srv.correoConfig) setCorreoConfig(srv.correoConfig);
-        if (srv.plantillaCorreo) setPlantillaCorreo(srv.plantillaCorreo);
-        const srvTieneDatos = (srv.libros?.length ?? 0) > 0 || (srv.comite?.participantes?.length ?? 0) > 0 || Boolean(srv.archivo);
-        if (srvTieneDatos) {
-          hidratando.current = true;
-          dispatch({
-            t: 'hidratar',
-            libros: srv.libros ?? [],
-            comite: { ...COMITE_VACIO, ...(srv.comite ?? {}) },
-            archivo: srv.archivo ?? null,
-            guardado: srv.guardado ?? null,
-          });
-          setGuardado(srv.guardado ?? null);
-          localStorage.setItem(CLAVE, JSON.stringify({ libros: srv.libros ?? [], comite: srv.comite ?? COMITE_VACIO, archivo: srv.archivo ?? null, guardado: srv.guardado ?? null }));
-        } else if (estado.libros.length > 0 || estado.comite.participantes.length > 0) {
-          // Migrar datos locales iniciales al servidor vacío
-          fetch('/api/estado', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ libros: estado.libros, comite: estado.comite, archivo: estado.archivo }),
-          }).catch(() => {});
-        }
-      })
-      .catch(() => {
-        setServidorActivo(false);
-      });
-    return () => {
-      cancelado = true;
-    };
+  const cargarServidor = useCallback(async (descartar = false, sigueActivo: () => boolean = () => true) => {
+    const r = await fetch('/api/estado', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error('No se pudo leer el servidor. Los cambios se conservarán en este navegador.');
+    const srv = await r.json();
+    if (!sigueActivo()) return;
+    if (!srv.revision) throw new Error('Reinicia el servidor para actualizar la protección de guardado.');
+    setServidorActivo(true);
+    setCorreoConfig(srv.correoConfig ?? CORREO_DEFECTO);
+    setPlantillaCorreo(srv.plantillaCorreo ?? PLANTILLA_DEFECTO);
+    let local: { pendiente?: boolean; revision?: string; libros?: Libro[]; comite?: ComiteEditorial } = {};
+    if (!descartar) {
+      try { local = JSON.parse(localStorage.getItem(CLAVE) || '{}'); } catch { /* Recuperar desde el servidor. */ }
+    }
+    if (!descartar && local.pendiente) {
+      revision.current = local.revision;
+      conflicto.current = local.revision !== srv.revision;
+      setPendiente(true);
+      if (conflicto.current) setErrorGuardado('Hay cambios locales pendientes y una versión diferente en el servidor. Descarga el respaldo antes de cargar la versión del servidor.');
+      return;
+    }
+    revision.current = srv.revision;
+    conflicto.current = false;
+    // Solo migrar automáticamente cuando el servidor nunca ha guardado un registro.
+    if (!descartar && srv.revision === 'inicial' && (local.libros?.length || local.comite?.participantes?.length)) return;
+    const datos = { libros: srv.libros ?? [], comite: { ...COMITE_VACIO, ...srv.comite }, archivo: srv.archivo ?? null, guardado: srv.guardado ?? null };
+    localStorage.setItem(CLAVE, JSON.stringify({ ...datos, revision: srv.revision, pendiente: false }));
+    hidratando.current = true;
+    dispatch({ t: 'hidratar', ...datos });
+    setGuardado(datos.guardado);
+    setPendiente(false);
+    setErrorGuardado('');
   }, []);
 
   useEffect(() => {
-    if (primera.current) {
-      primera.current = false;
-      return;
+    let activo = true;
+    cargarServidor(false, () => activo).catch((e: Error) => {
+      if (activo) { setServidorActivo(false); setErrorGuardado(e.message); }
+    }).finally(() => { if (activo) setCargando(false); });
+    return () => { activo = false; };
+  }, [cargarServidor]);
+
+  useEffect(() => {
+    if (cargando) return;
+    if (hidratando.current) { hidratando.current = false; return; }
+    const numero = ++secuencia.current;
+    const datos = { libros: estado.libros, comite: estado.comite, archivo: estado.archivo };
+    setPendiente(true);
+    try {
+      localStorage.setItem(CLAVE, JSON.stringify({ ...datos, guardado, revision: revision.current, pendiente: true }));
+    } catch {
+      setErrorGuardado('No se pudo crear el respaldo local. Descarga un respaldo para conservar tus cambios.');
     }
-    if (hidratando.current) {
-      hidratando.current = false;
-      return;
-    }
-    const t = setTimeout(() => {
-      const g = new Date().toISOString();
-      localStorage.setItem(CLAVE, JSON.stringify({ libros: estado.libros, comite: estado.comite, archivo: estado.archivo, guardado: g }));
-      setGuardado(g);
-      fetch('/api/estado', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ libros: estado.libros, comite: estado.comite, archivo: estado.archivo }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((res) => {
-          if (res?.ok) {
-            setServidorActivo(true);
-            if (res.guardado) setGuardado(res.guardado);
+    const timer = setTimeout(() => {
+      cola.current = cola.current.then(async () => {
+        if (numero !== secuencia.current || conflicto.current) return;
+        try {
+          if (!revision.current) {
+            const r = await fetch('/api/estado', { signal: AbortSignal.timeout(10000) });
+            if (!r.ok) throw new Error('Servidor no disponible. Hay cambios pendientes en este navegador.');
+            const srv = await r.json();
+            if (srv.revision !== 'inicial') {
+              conflicto.current = true;
+              throw new Error('Revisa la versión del servidor antes de sincronizar los cambios locales.');
+            }
+            revision.current = srv.revision;
           }
-        })
-        .catch(() => setServidorActivo(false));
+          const r = await fetch('/api/estado', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...datos, revision: revision.current }),
+            signal: AbortSignal.timeout(10000),
+          });
+          const respuesta = await r.json();
+          if (r.status === 409 || r.status === 428) conflicto.current = true;
+          if (!r.ok) throw new Error(respuesta.error || 'No se pudo guardar en el servidor.');
+          revision.current = respuesta.revision;
+          setServidorActivo(true);
+          if (numero === secuencia.current) {
+            localStorage.setItem(CLAVE, JSON.stringify({ ...datos, guardado: respuesta.guardado, revision: respuesta.revision, pendiente: false }));
+            setGuardado(respuesta.guardado);
+            setPendiente(false);
+            setErrorGuardado('');
+          }
+        } catch (e) {
+          setServidorActivo(false);
+          setErrorGuardado(e instanceof Error ? e.message : 'Error al guardar. Descarga un respaldo.');
+        }
+      });
     }, 250);
-    return () => clearTimeout(t);
-  }, [estado.libros, estado.comite, estado.archivo]);
+    return () => clearTimeout(timer);
+  // La fecha de guardado solo cambia tras confirmar la escritura.
+  }, [estado.libros, estado.comite, estado.archivo, cargando, intento]);
+
+  useEffect(() => {
+    const avisar = (e: BeforeUnloadEvent) => { if (pendiente) { e.preventDefault(); } };
+    window.addEventListener('beforeunload', avisar);
+    return () => window.removeEventListener('beforeunload', avisar);
+  }, [pendiente]);
 
   const conHistorial = useCallback(
     (a: Accion) => {
@@ -286,6 +322,15 @@ export function useLibros() {
   );
 
   return {
+    cargando,
+    errorGuardado,
+    pendiente,
+    reintentar: () => setIntento((n) => n + 1),
+    cargarServidor: async () => {
+      ++secuencia.current;
+      await cola.current;
+      await cargarServidor(true).catch((e: Error) => setErrorGuardado(e.message));
+    },
     libros: estado.libros,
     comite: estado.comite,
     archivo: estado.archivo,

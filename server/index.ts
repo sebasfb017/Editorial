@@ -6,8 +6,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import type { ComiteEditorial, CorreoConfigPublica, Libro, PlantillaCorreo } from '../src/types';
+import { FASE_MAP } from '../src/fases';
 
 const PORT = Number(process.env.API_PORT || 48211);
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -23,6 +25,7 @@ interface CorreoConfigInterna {
 }
 
 interface DbEstado {
+  revision: string;
   libros: Libro[];
   comite: ComiteEditorial;
   archivo: string | null;
@@ -44,6 +47,7 @@ const PLANTILLA_DEFECTO: PlantillaCorreo = {
 };
 
 const DB_DEFECTO: DbEstado = {
+  revision: 'inicial',
   libros: [],
   comite: { proximaSesion: '', lugarOEnlace: '', notasComite: '', participantes: [] },
   archivo: null,
@@ -65,6 +69,7 @@ function leerDb(): DbEstado {
     const raw = fs.readFileSync(DB_FILE, 'utf8');
     const parsed = JSON.parse(raw) as Partial<DbEstado>;
     return {
+      revision: parsed.revision ?? parsed.guardado ?? 'inicial',
       libros: parsed.libros ?? [],
       comite: { ...DB_DEFECTO.comite, ...(parsed.comite ?? {}) },
       archivo: parsed.archivo ?? null,
@@ -73,7 +78,7 @@ function leerDb(): DbEstado {
       plantillaCorreo: { ...PLANTILLA_DEFECTO, ...(parsed.plantillaCorreo ?? {}) },
     };
   } catch {
-    return structuredClone(DB_DEFECTO);
+    throw new Error('No se pudo leer la base de datos. Revisa el archivo o restaura un respaldo antes de guardar.');
   }
 }
 
@@ -81,6 +86,7 @@ function leerDb(): DbEstado {
 function guardarDb(db: DbEstado) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = `${DB_FILE}.tmp`;
+  if (fs.existsSync(DB_FILE)) fs.copyFileSync(DB_FILE, `${DB_FILE}.bak`);
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8');
   fs.renameSync(tmp, DB_FILE);
 }
@@ -130,6 +136,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/estado') {
       const db = leerDb();
       return json(res, 200, {
+        revision: db.revision,
         libros: db.libros,
         comite: db.comite,
         archivo: db.archivo,
@@ -145,14 +152,33 @@ const server = http.createServer(async (req, res) => {
         libros?: Libro[];
         comite?: ComiteEditorial;
         archivo?: string | null;
+        revision?: string;
       };
       const db = leerDb();
+      if (!body.revision) return json(res, 428, { error: 'Actualiza la aplicación antes de guardar.' });
+      // Evita que el último equipo que guarda borre silenciosamente el trabajo de otro.
+      if (body.revision !== db.revision) {
+        return json(res, 409, { error: 'Otro equipo guardó cambios. Descarga tu respaldo y carga la versión del servidor para revisar las diferencias.' });
+      }
+      if (!Array.isArray(body.libros) || !body.comite || !Array.isArray(body.comite.participantes)) {
+        return json(res, 400, { error: 'El registro enviado tiene un formato inválido.' });
+      }
+      const ids = new Set(body.libros.map((l) => l?.id));
+      if (ids.size !== body.libros.length || body.libros.some((l) =>
+        !l || typeof l.id !== 'string' || !l.id || typeof l.titulo !== 'string' ||
+        !Object.hasOwn(FASE_MAP, l.fase) || !Array.isArray(l.seguimiento) || !l.hojas ||
+        ['proyectos', 'proceso', 'salida', 'pendientes'].some((h) => typeof l.hojas[h as keyof Libro['hojas']] !== 'boolean')
+      )) {
+        return json(res, 400, { error: 'Hay publicaciones con datos inválidos o identificadores duplicados.' });
+      }
       if (body.libros !== undefined) db.libros = body.libros;
       if (body.comite !== undefined) db.comite = body.comite;
       if (body.archivo !== undefined) db.archivo = body.archivo;
       db.guardado = new Date().toISOString();
+      // Cada escritura genera una revisión nueva para el siguiente guardado.
+      db.revision = randomUUID();
       guardarDb(db);
-      return json(res, 200, { ok: true, guardado: db.guardado });
+      return json(res, 200, { ok: true, guardado: db.guardado, revision: db.revision });
     }
 
     // 3. Guardar configuración SMTP y/o bocetos de correo
@@ -224,5 +250,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`API Centro Editorial lista en http://127.0.0.1:${PORT} (BD: ${DB_FILE})`);
+  const direccion = server.address();
+  const puerto = direccion && typeof direccion === 'object' ? direccion.port : PORT;
+  console.log(`API Centro Editorial lista en http://127.0.0.1:${puerto} (BD: ${DB_FILE})`);
 });

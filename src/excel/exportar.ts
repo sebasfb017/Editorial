@@ -29,8 +29,8 @@ function formatearColumna(ws: XLSX.WorkSheet, col: number, desde: number, hasta:
 }
 
 function hojaSecundaria(libros: Libro[], obs: (l: Libro) => string): XLSX.WorkSheet {
-  const head = ['Nombre del libro', 'Etapa actual', '¿Cuenta con ISBN?', 'Precio (COP)', 'Observaciones'];
-  const filas = libros.map((l) => [l.titulo, l.etapa, l.isbn, l.costo, obs(l)]);
+  const head = ['Nombre del libro', 'Etapa actual', '¿Cuenta con ISBN?', 'Precio (COP)', 'Observaciones', 'ID publicación', 'AÑO DIGITAL', 'AÑO FÍSICO', 'FECHA SALIDA'];
+  const filas = libros.map((l) => [l.titulo, l.etapa, l.isbn, l.costo, obs(l), l.id, l.anioDigital, l.anioFisico, l.fechaSalida]);
   const ws = XLSX.utils.aoa_to_sheet([head, ...filas, []]);
   const ultima = filas.length + 1; // fila (1-based) del último libro
   const totalRow = filas.length + 2; // 0-based → fila vacía + total
@@ -58,7 +58,7 @@ export function exportarExcel(libros: Libro[]): Blob {
   const head = [
     'No.', 'AGRUPACIÓN', 'CATEGORÍA', 'TÍTULO', 'AUTOR', 'LÍDER PROYECTO',
     'PROYECTO', 'VALOR', 'CDP', 'CONCEPTO PARES', 'REQUERIMIENTO', 'AÑO',
-    'OBSERVACIÓN', 'ESTADO', 'ISBN', 'FASE', 'RESPONSABLE', 'PRÓXIMA ACCIÓN', 'FECHA COMPROMISO',
+    'OBSERVACIÓN', 'ESTADO', 'ISBN', 'FASE', 'RESPONSABLE', 'PRÓXIMA ACCIÓN', 'FECHA COMPROMISO', 'ID publicación', 'AÑO DIGITAL', 'AÑO FÍSICO', 'FECHA SALIDA',
   ];
   const ws1 = XLSX.utils.aoa_to_sheet([
     ['PROYECTOS - Seguimiento'],
@@ -72,7 +72,7 @@ export function exportarExcel(libros: Libro[]): Blob {
       l.liderProyecto ?? '',
       l.proyecto,
       costoProyectos(l),
-      l.cdp && /^\d+$/.test(l.cdp) ? Number(l.cdp) : l.cdp,
+      l.cdp,
       l.conceptoPares ?? '',
       l.requerimiento ?? '',
       l.anioFisico ?? l.anioDigital ?? '',
@@ -82,7 +82,7 @@ export function exportarExcel(libros: Libro[]): Blob {
       FASE_MAP[l.fase].nombre,
       l.responsable,
       l.proximaAccion,
-      l.fechaCompromiso,
+      l.fechaCompromiso, l.id, l.anioDigital, l.anioFisico, l.fechaSalida,
     ]),
   ]);
   ws1['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
@@ -99,12 +99,12 @@ export function exportarExcel(libros: Libro[]): Blob {
     .flatMap((l) => l.seguimiento.map((n) => ({ l, n })))
     .sort((a, b) => b.n.fecha.localeCompare(a.n.fecha));
   const ws5 = XLSX.utils.aoa_to_sheet([
-    ['Fecha', 'Libro', 'Tipo', 'Nota'],
+    ['Fecha', 'Libro', 'Tipo', 'Nota', 'ID publicación', 'ID nota', 'Fecha ISO', 'Tipo ID'],
     ...notas.map(({ l, n }) => [
       new Date(n.fecha).toLocaleString('es-CO'),
       tituloCorto(l.titulo),
       n.tipo === 'nota' ? 'Nota' : n.tipo === 'cambio' ? 'Cambio' : 'Sistema',
-      n.texto,
+      n.texto, l.id, n.id, n.fecha, n.tipo,
     ]),
   ]);
   ws5['!cols'] = [{ wch: 20 }, { wch: 50 }, { wch: 10 }, { wch: 80 }];

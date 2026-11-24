@@ -20,7 +20,9 @@ interface Props {
   notaLibro: (id: string, texto: string) => void;
   archivo: string | null;
   abrir: (id: string) => void;
-  irA: (v: Vista, f?: FaseId | null) => void;
+  irA: (v: Vista, f?: FaseId | null, contexto?: { grupo?: 'todas' | TipoPublicacion; anio?: number | 'todos' }) => void;
+  grupoActivo: 'todas' | TipoPublicacion;
+  anioActivo: number | 'todos';
   onImportar: () => void;
   onNueva: () => void;
   onToast: (msg: string) => void;
@@ -77,7 +79,7 @@ function alertas(libros: Libro[]): (Alerta & { extra: number })[] {
   return [...porLibro.values()];
 }
 
-export function Resumen({ libros, comite, actualizarComite, actualizarLibro, notaLibro, archivo, abrir, irA, onImportar, onNueva, onToast }: Props) {
+export function Resumen({ libros, comite, actualizarComite, actualizarLibro, notaLibro, archivo, abrir, irA, grupoActivo, anioActivo, onImportar, onNueva, onToast }: Props) {
   const [cifraActiva, setCifraActiva] = useState<CifraId | null>(null);
   const [filtroIsbn, setFiltroIsbn] = useState<'faltan' | 'asignados'>('faltan');
   const [grupo, setGrupo] = useState<'todas' | TipoPublicacion>('todas');
@@ -86,6 +88,7 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
   const [pRol, setPRol] = useState('');
   const [pCorreo, setPCorreo] = useState('');
   const hoy = new Date();
+  const navegar = (vista: Vista, fase: FaseId | null = null) => irA(vista, fase, { grupo: grupoActivo, anio: anioActivo });
 
   const aniosDisponibles = useMemo(() => {
     const set = new Set<number>([2026]);
@@ -195,7 +198,13 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
       `\nTítulos para revisión (${datos.paraComite.length}):`,
       ...datos.paraComite.map((l, i) => `${i + 1}. ${tituloCorto(l.titulo)} [${FASE_MAP[l.fase].nombre}]${l.conceptoPares ? ` — Pares: ${l.conceptoPares}` : ''}`),
     ].filter(Boolean);
-    navigator.clipboard?.writeText(lineas.join('\n')).then(() => onToast('Orden del día copiado al portapapeles.'));
+    if (!navigator.clipboard) {
+      onToast('El portapapeles requiere abrir la aplicación en localhost o mediante HTTPS.');
+      return;
+    }
+    navigator.clipboard.writeText(lineas.join('\n'))
+      .then(() => onToast('Orden del día copiado al portapapeles.'))
+      .catch(() => onToast('No se pudo copiar. Revisa el permiso del portapapeles.'));
   };
 
   const fecha = hoy.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -327,27 +336,27 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
                   <p className="panel-nota">Un mismo libro puede aparecer en varias hojas del Excel y aquí se mantiene unido en una sola ficha.</p>
                 </div>
                 <div className="cifra-detalle-acciones">
-                  <button className="btn btn-peq btn-primario" onClick={() => irA('proyectos')}>Abrir Proyectos 2026-2</button>
+                  <button className="btn btn-peq btn-primario" onClick={() => navegar('proyectos')}>Abrir Proyectos 2026-2</button>
                   <button className="icono-btn" onClick={() => setCifraActiva(null)} aria-label="Cerrar detalle"><Icono n="cerrar" size={15} /></button>
                 </div>
               </div>
               <div className="cifra-hojas">
-                <button className="cifra-hoja-card" onClick={() => irA('proyectos')}>
+                <button className="cifra-hoja-card" onClick={() => navegar('proyectos')}>
                   <strong>{datos.base.length}</strong>
                   <span>Proyectos 2026-2</span>
                   <small>Registro maestro completo</small>
                 </button>
-                <button className="cifra-hoja-card" onClick={() => irA('proceso')}>
+                <button className="cifra-hoja-card" onClick={() => navegar('proceso')}>
                   <strong>{datos.enProcesoHoja}</strong>
                   <span>Proceso de libros</span>
                   <small>Seguimiento editorial activo</small>
                 </button>
-                <button className="cifra-hoja-card" onClick={() => irA('salida')}>
+                <button className="cifra-hoja-card" onClick={() => navegar('salida')}>
                   <strong>{datos.salen.length}</strong>
                   <span>Salen en 2026</span>
                   <small>Programados para este año</small>
                 </button>
-                <button className="cifra-hoja-card" onClick={() => irA('pendientes')}>
+                <button className="cifra-hoja-card" onClick={() => navegar('pendientes')}>
                   <strong>{datos.enPendientesHoja}</strong>
                   <span>Pendientes 2027+</span>
                   <small>Próximas vigencias</small>
@@ -413,7 +422,7 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
                   <p className="panel-nota">Haz clic en cualquier título para abrir su ficha y actualizar su etapa o notas.</p>
                 </div>
                 <div className="cifra-detalle-acciones">
-                  <button className="btn btn-peq btn-primario" onClick={() => irA('proceso')}>Ir a Proceso de libros</button>
+                  <button className="btn btn-peq btn-primario" onClick={() => navegar('proceso')}>Ir a Proceso de libros</button>
                   <button className="icono-btn" onClick={() => setCifraActiva(null)} aria-label="Cerrar detalle"><Icono n="cerrar" size={15} /></button>
                 </div>
               </div>
@@ -469,7 +478,7 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
                   <p className="panel-nota">Inversión en esta hoja: {fmtCOP(datos.salen.reduce((s, l) => s + (l.costo ?? 0), 0))}. Haz clic en un libro para editarlo.</p>
                 </div>
                 <div className="cifra-detalle-acciones">
-                  <button className="btn btn-peq btn-primario" onClick={() => irA('salida')}>Abrir Salen en 2026</button>
+              <button className="btn btn-peq btn-primario" onClick={() => navegar('salida')}>Abrir Salen en 2026</button>
                   <button className="icono-btn" onClick={() => setCifraActiva(null)} aria-label="Cerrar detalle"><Icono n="cerrar" size={15} /></button>
                 </div>
               </div>
@@ -504,7 +513,7 @@ export function Resumen({ libros, comite, actualizarComite, actualizarLibro, not
           </div>
           <div className="fases-lista">
             {datos.porFase.map((p) => (
-              <button key={p.f.id} className={`fase-fila ${p.n ? '' : 'cero'}`} onClick={() => p.n && irA('proyectos', p.f.id)}>
+              <button key={p.f.id} className={`fase-fila ${p.n ? '' : 'cero'}`} onClick={() => p.n && navegar('proyectos', p.f.id)}>
                 <span className="fase-nombre">
                   <i style={{ background: p.f.color }} />
                   {p.f.nombre}

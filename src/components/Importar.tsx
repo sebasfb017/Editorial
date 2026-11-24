@@ -5,13 +5,9 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { Libro } from '../types';
-import {
-  aplicarCombinacion, HOJA_MAP, leerExcel, planificarCombinacion, prepararReemplazo,
-  type PlanImportacion, type ResultadoLectura,
-} from '../excel/importar';
-import { exportarPlantillaExcel } from '../excel/exportar';
 import { Icono } from './ui';
 import { descargar, tituloCorto } from '../utils';
+import type * as ImportarExcel from '../excel/importar';
 
 interface Props {
   archivoInicial: File | null;
@@ -21,35 +17,48 @@ interface Props {
 }
 
 export function Importar({ archivoInicial, actuales, cerrar, aplicar }: Props) {
+  const [excel, setExcel] = useState<typeof ImportarExcel | null>(null);
   const [archivo, setArchivo] = useState<File | null>(archivoInicial);
-  const [lectura, setLectura] = useState<ResultadoLectura | null>(null);
-  const [plan, setPlan] = useState<PlanImportacion | null>(null);
+  const [lectura, setLectura] = useState<ImportarExcel.ResultadoLectura | null>(null);
+  const [plan, setPlan] = useState<ImportarExcel.PlanImportacion | null>(null);
   const [error, setError] = useState('');
   const [modo, setModo] = useState<'combinar' | 'reemplazar'>('combinar');
   const [arrastre, setArrastre] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
+  // La biblioteca de Excel se carga al abrir este modal, no al iniciar la aplicación.
   useEffect(() => {
-    if (!archivo) return;
+    let activo = true;
+    import('../excel/importar').then((mod) => { if (activo) setExcel(mod); });
+    return () => { activo = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!archivo || !excel) return;
+    let cancelado = false;
+    setLectura(null);
+    setPlan(null);
     setError('');
     archivo
       .arrayBuffer()
       .then((buf) => {
-        const r = leerExcel(buf);
+        if (cancelado) return;
+        const r = excel.leerExcel(buf);
         if (!r.libros.length) throw new Error('No se encontraron libros en el archivo. Revisa que las hojas tengan la columna de título.');
         setLectura(r);
-        setPlan(planificarCombinacion(actuales, r.libros));
+        setPlan(excel.planificarCombinacion(actuales, r.libros));
       })
-      .catch((e: Error) => setError(e.message || 'No se pudo leer el archivo.'));
-  }, [archivo, actuales]);
+      .catch((e: Error) => { if (!cancelado) setError(e.message || 'No se pudo leer el archivo.'); });
+    return () => { cancelado = true; };
+  }, [archivo, actuales, excel]);
 
   const confirmar = () => {
     if (!lectura || !plan || !archivo) return;
     if (modo === 'reemplazar' || actuales.length === 0) {
-      aplicar(prepararReemplazo(lectura.libros), archivo.name, `Se cargaron ${lectura.libros.length} libros desde ${archivo.name}.`);
+      aplicar(excel!.prepararReemplazo(lectura.libros), archivo.name, `Se cargaron ${lectura.libros.length} libros desde ${archivo.name}.`);
     } else {
       aplicar(
-        aplicarCombinacion(actuales, plan),
+        excel!.aplicarCombinacion(actuales, plan),
         archivo.name,
         `${plan.nuevos.length} nuevos y ${plan.actualizados.length} actualizados desde ${archivo.name}.`,
       );
@@ -103,7 +112,10 @@ export function Importar({ archivoInicial, actuales, cerrar, aplicar }: Props) {
               <button
                 type="button"
                 className="btn btn-peq"
-                onClick={() => descargar(exportarPlantillaExcel(), 'Plantilla Seguimiento Editorial.xlsx')}
+                onClick={async () => {
+                  const { exportarPlantillaExcel } = await import('../excel/exportar');
+                  descargar(exportarPlantillaExcel(), 'Plantilla Seguimiento Editorial.xlsx');
+                }}
               >
                 <Icono n="bajar" size={14} /> Descargar plantilla (.xlsx)
               </button>
@@ -126,7 +138,7 @@ export function Importar({ archivoInicial, actuales, cerrar, aplicar }: Props) {
                 {lectura.hojas.map((h) => (
                   <tr key={h.nombre} className={h.tipo ? '' : 'muted'}>
                     <td>{h.nombre}</td>
-                    <td>{h.tipo ? HOJA_MAP[h.tipo].etiqueta : 'No reconocida'}</td>
+                    <td>{h.tipo && excel ? excel.HOJA_MAP[h.tipo].etiqueta : 'No reconocida'}</td>
                     <td className="der mono">{h.filas}</td>
                   </tr>
                 ))}
@@ -149,6 +161,7 @@ export function Importar({ archivoInicial, actuales, cerrar, aplicar }: Props) {
                       <span>
                         {plan.nuevos.length} nuevos · {plan.actualizados.length} con cambios · {plan.sinCambios} iguales. Se conservan
                         notas, responsables y fechas.
+                        {' '}Se unen publicaciones por identificador o título completo equivalente. Revisa los títulos abreviados antes de combinar.
                       </span>
                     </div>
                   </label>

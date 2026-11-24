@@ -53,6 +53,8 @@ interface Props {
   hoja: HojaId;
   libros: Libro[];
   filtroFaseInicial: FaseId | null;
+  filtroGrupoInicial?: 'todas' | TipoPublicacion;
+  filtroAnioInicial?: number | 'todos';
   abrir: (id: string) => void;
   abiertoId: string | null;
   actualizar: (id: string, c: Partial<Libro>) => void;
@@ -68,12 +70,14 @@ function valorOrden(l: Libro, c: Col): string | number {
   return normalizar(String(v ?? ''));
 }
 
-export function Hoja({ hoja, libros, filtroFaseInicial, abrir, abiertoId, actualizar, nuevo, onImportar }: Props) {
+export function Hoja({ hoja, libros, filtroFaseInicial, filtroGrupoInicial = 'todas', filtroAnioInicial = 'todos', abrir, abiertoId, actualizar, nuevo, onImportar }: Props) {
   const def = HOJA_MAP[hoja];
   const cols = COLUMNAS[hoja];
   const [q, setQ] = useState('');
   const [fase, setFase] = useState<FaseId | null>(filtroFaseInicial);
-  const [grupo, setGrupo] = useState<'todas' | TipoPublicacion>('todas');
+  // Estos filtros llegan desde Resumen para que el detalle conserve el contexto elegido.
+  const [grupo, setGrupo] = useState<'todas' | TipoPublicacion>(filtroGrupoInicial);
+  const [anio] = useState<number | 'todos'>(filtroAnioInicial);
   const [orden, setOrden] = useState<{ k: keyof Libro; asc: boolean } | null>(hoja === 'proyectos' ? { k: 'no', asc: true } : null);
   const [editando, setEditando] = useState<{ id: string; k: keyof Libro } | null>(null);
   const buscador = useRef<HTMLInputElement>(null);
@@ -83,9 +87,10 @@ export function Hoja({ hoja, libros, filtroFaseInicial, abrir, abiertoId, actual
     () =>
       libros.filter((l) => {
         if (grupo !== 'todas' && (l.tipoPublicacion ?? 'arbitrada') !== grupo) return false;
+        if (anio !== 'todos' && ![l.anioDigital, l.anioFisico, l.fechaSalida ? Number(l.fechaSalida.slice(0, 4)) : null].includes(anio)) return false;
         return l.hojas[hoja] || (hoja === 'proyectos' && fase !== null && l.fase === fase);
       }),
-    [libros, hoja, fase, grupo],
+    [libros, hoja, fase, grupo, anio],
   );
 
   const filas = useMemo(() => {
