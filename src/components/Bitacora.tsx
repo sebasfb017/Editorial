@@ -1,3 +1,8 @@
+/**
+ * Vista de Bitácora global:
+ * - Muestra cronológicamente (agrupado por día) todas las notas manuales, cambios de fase/campos y eventos del sistema.
+ * - Permite filtrar por tipo o buscar, y registrar notas rápidas asociadas a cualquier publicación.
+ */
 import { useMemo, useState } from 'react';
 import type { Libro, TipoNota } from '../types';
 import { hoyISO, normalizar, tituloCorto } from '../utils';

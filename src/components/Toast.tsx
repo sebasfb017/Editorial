@@ -1,3 +1,6 @@
+/**
+ * Notificación flotante temporal en la parte inferior de la pantalla (con botón opcional de "Deshacer").
+ */
 import { useEffect } from 'react';
 
 export interface ToastMsg {

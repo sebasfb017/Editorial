@@ -1,3 +1,8 @@
+/**
+ * Vista de tabla editable en línea para cada una de las 4 hojas del Excel.
+ * Incluye buscador (`/`), filtros por agrupación (Arbitradas / No arbitradas) y por fase,
+ * ordenamiento por columna y edición rápida con doble clic.
+ */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as KEvent, type ReactNode } from 'react';
 import type { FaseId, HojaId, Libro, TipoPublicacion } from '../types';
 import { FASES } from '../fases';

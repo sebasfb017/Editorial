@@ -1,3 +1,9 @@
+/**
+ * Módulo de importación de Excel (.xlsx):
+ * - Lee las hojas reconocidas, omite filas de totales y unifica títulos repetidos en una sola ficha.
+ * - Mapea encabezados tolerando variantes de nombre, infiere fases y clasificación (Arbitrada / No arbitrada).
+ * - Planifica y aplica combinaciones ("Combinar" vs. "Reemplazar") conservando historial y notas.
+ */
 import * as XLSX from 'xlsx';
 import type { FaseId, HojaId, Libro, SubtipoPublicacion, TipoPublicacion } from '../types';
 import { FASES, faseDeTexto, inferirFase } from '../fases';

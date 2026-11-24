@@ -1,3 +1,9 @@
+/**
+ * Componente raíz de la aplicación:
+ * - Orquesta la navegación entre vistas (`resumen`, hojas del Excel, `bitacora`, `pares`).
+ * - Gestiona los modales/paneles globales: Ficha lateral, Importar Excel y Nueva Publicación.
+ * - Registra atajos de teclado globales (`Esc` para cerrar ficha, `Ctrl+Z` para deshacer) y arrastrar-y-soltar Excel.
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FaseId, HojaId, Libro, Vista } from './types';
 import { useLibros } from './store';

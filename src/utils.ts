@@ -1,3 +1,9 @@
+/**
+ * Utilidades compartidas de formato y comparación:
+ * - Formateo de moneda COP, fechas cortas/largas y tiempos relativos ("hace 2 días").
+ * - Normalización de texto y `mismoTitulo()` para unir libros repetidos entre hojas del Excel.
+ * - Validación de estado de ISBN y cálculo de costo total.
+ */
 import type { Libro } from './types';
 
 export const uid = () =>

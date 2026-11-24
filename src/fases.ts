@@ -1,3 +1,7 @@
+/**
+ * Catálogo de las 10 fases editoriales (con su color y nombre corto) y reglas
+ * de expresiones regulares para inferir la fase automáticamente desde textos libres del Excel.
+ */
 import type { FaseId } from './types';
 
 export interface FaseDef {

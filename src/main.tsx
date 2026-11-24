@@ -1,3 +1,6 @@
+/**
+ * Punto de entrada de React: carga las fuentes tipográficas locales, los estilos globales y monta <App />.
+ */
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource/source-serif-4/400.css';

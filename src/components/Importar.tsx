@@ -1,3 +1,8 @@
+/**
+ * Modal de carga de archivos Excel (.xlsx / .xls / .xlsm):
+ * - Permite arrastrar o seleccionar un archivo, previsualiza las hojas reconocidas y los cambios detectados.
+ * - Ofrece elegir entre "Combinar" (conserva notas/gestión) o "Reemplazar todo", y descargar la plantilla oficial.
+ */
 import { useEffect, useRef, useState } from 'react';
 import type { Libro } from '../types';
 import {

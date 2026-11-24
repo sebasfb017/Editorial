@@ -1,3 +1,8 @@
+/**
+ * Barra lateral de navegación:
+ * - Enlaces a Resumen, las 4 hojas del Excel, Pares y correos, y Bitácora con sus contadores.
+ * - Botones para Cargar/Descargar Excel e indicador de sincronización (Servidor vs. Local).
+ */
 import type { FaseId, Libro, Vista } from '../types';
 import { HOJAS } from '../excel/importar';
 import { Icono } from './ui';

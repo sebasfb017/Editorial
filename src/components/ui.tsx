@@ -1,3 +1,9 @@
+/**
+ * Componentes visuales reutilizables:
+ * - `FaseTag`: insignia con el color y nombre de la fase editorial.
+ * - `IsbnCell`: muestra ISBN asignados o estado en trámite.
+ * - `Icono`: iconos SVG ligeros dibujados con trazos simples sin dependencias externas.
+ */
 import type { FaseId } from '../types';
 import { FASE_MAP } from '../fases';
 import { estadoISBN, listaISBN } from '../utils';

@@ -1,3 +1,8 @@
+/**
+ * Módulo de exportación a Excel (.xlsx):
+ * - `exportarExcel`: genera el libro completo con las 4 hojas editoriales + la hoja `Bitácora`.
+ * - `exportarPlantillaExcel`: genera la plantilla oficial con ejemplos e instrucciones para evitar errores al cargar.
+ */
 import * as XLSX from 'xlsx';
 import type { HojaId, Libro } from '../types';
 import { FASE_MAP } from '../fases';
